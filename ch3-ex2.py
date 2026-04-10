@@ -23,24 +23,6 @@ from itertools import chain
 from scipy.ndimage import shift
 
 def main():
-    '''
-    Fetching the data
-    '''
-    if os.path.exists("mnist_data.npz"):
-        # Load from file
-        loaded = np.load("mnist_data.npz", allow_pickle=True)
-        X, y = loaded["X"], loaded["y"]
-    else:
-        # Download
-        mnist = fetch_openml('mnist_784', as_frame=False)
-        X, y = mnist.data, mnist.target
-        # Save for next time
-        np.savez("mnist_data.npz", X=X, y=y)
-
-
-    # split into train set and test set
-    X_train, X_test, y_train, y_test = X[:60000], X[60000:], y[:60000], y[60000:]
-     
     # The following terminates with n=10 (the full training set is n=12)
     if not (os.path.exists("X_train_augm_250k.pkl") and os.path.exists("X_train_augm_250k.pkl")):
         X_train_augm_dic={}
@@ -75,6 +57,24 @@ def main():
     # Output: Training on the augmented first 5000 data (so 25.000 data) scores 0.9495
     # Output: Training on the augmented first 10000 data (so 50.000 data) scores 0.9607
     # Output: Training on the augmented first 50000 data (so 250.000 data) scores 0.9752
+    
+'''
+Fetching the data
+'''
+if os.path.exists("mnist_data.npz"):
+    # Load from file
+    loaded = np.load("mnist_data.npz", allow_pickle=True)
+    X, y = loaded["X"], loaded["y"]
+else:
+    # Download
+    mnist = fetch_openml('mnist_784', as_frame=False)
+    X, y = mnist.data, mnist.target
+    # Save for next time
+    np.savez("mnist_data.npz", X=X, y=y)
+
+
+# split into train set and test set
+X_train, X_test, y_train, y_test = X[:60000], X[60000:], y[:60000], y[60000:]
     
 
 def plot_digit(image_data,name):
