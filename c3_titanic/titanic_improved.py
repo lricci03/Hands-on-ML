@@ -15,6 +15,9 @@ from pandas.plotting import scatter_matrix
 import matplotlib.pyplot as plt
 
 
+# Compared to titanic.py we add the categories 'FamilySize' and 'IsAlone'
+
+
 '''
 # create a list of dictionaries from the csv
 # Each dictionary is one row
@@ -57,19 +60,6 @@ train_set, test_set = train_test_split(titanic_full,test_size=0.2,random_state=4
 titanic = train_set.drop('Survived',axis=1)
 titanic_labels = train_set['Survived'].copy()
 
-# Plot attributes against each other
-'''
-attributes = ['Survived','Age','Sex','Pclass','Fare']
-scatter_matrix(titanic_full[attributes],figsize=(15,10))
-plt.savefig('correlation.png')
-'''
-
-# Get correlation indices with survive
-corr_matrix = train_set.corr(numeric_only=True)
-#print(corr_matrix['Survived'].sort_values(ascending=False))
-
-
-
 
 # Info about the data
 #print(titanic_full.info())
@@ -90,63 +80,16 @@ corr_matrix = train_set.corr(numeric_only=True)
  11  Embarked     889 non-null    str    
 '''
 
-# ================ Removing columns ===================
-# We actually don't do this because ColumnTransform below already filters out these categories
-# If we remove them, then we also have to remove from the data when we want to predict.
-'''
-# For most of the passengers the Cabin data misses.
-# We remove the column Cabin
-titanic.drop('Cabin',axis=1,inplace=True)
-# We remove SibSp (no. of siblings)
-titanic.drop('SibSp',axis=1,inplace=True)
-# We remove Parch (no. of parents)
-titanic.drop('Parch',axis=1,inplace=True)
-# We remove Name
-titanic.drop('Name',axis=1,inplace=True)
-# We remove Ticket
-titanic.drop('Ticket',axis=1,inplace=True)
-# We remove the column PassengerId
-titanic.drop('PassengerId',axis=1,inplace=True)
-'''
+# ================ Adding columns ===================
+# From the forum: we might use the family size + travelling alone as additional data
 
-'''
-# Not necessary anymore, we do this directly as Pipeline in ColumnTransform below
-# ================ Filling columns =====================
-# We fill the column Embarked with the most frequent
-imputer = SimpleImputer(strategy='most_frequent')
-titanic['Embarked']=imputer.fit_transform(titanic[['Embarked']])[:, 0]
-# We set Age = mean for the passengers who don't have it
-mean = titanic['Age'].mean()
-titanic['Age'] = titanic['Age'].fillna(mean)
-'''
+titanic_full['FamilySize'] = titanic_full['SibSp'] + titanic_full['Parch'] + 1
+titanic['FamilySize'] = titanic['SibSp'] + titanic['Parch'] + 1
+
+titanic_full['IsAlone'] = (titanic_full['FamilySize'] == 1).astype(int)
+titanic['IsAlone'] = (titanic['FamilySize'] == 1).astype(int)
+
 # ============== Standardize the data ===============
-
-# Plot an histogram of the data
-'''titanic_full.hist(bins=50,figsize=(15,10))
-plt.savefig('histogram.png')
-'''
-
-# From the histogram:
-#   The Fare attribute has a heavy tail to the right -> take the log
-# Using log1p = log(1+x) b/c Fare contains 0
-'''
-log_transformer = FunctionTransformer(np.log1p)
-log_fare = log_transformer.transform(titanic[['Fare']])
-log_fare.hist(bins=50,figsize=(15,10))
-plt.savefig('log_fare_hist.png')
-'''
-
-'''
-# It is not ideal. We use instead the Yeo-Johnson transformer
-pt = PowerTransformer(method='yeo-johnson')
-#titanic['Fare_Norm'] 
-norm_fare = pt.fit_transform(titanic[['Fare']])
-plt.hist(norm_fare,bins=50)
-plt.savefig('norm_fare_hist.png')
-
-# Change the respective column in titanic
-titanic['Fare'] = pt.fit_transform(titanic[['Fare']])
-'''
 
 # Remove tail to Fare and Standardize
 #fare_pipeline = make_pipeline(PowerTransformer(method='yeo-johnson'),StandardScaler())
@@ -159,6 +102,7 @@ age_pipeline = make_pipeline(SimpleImputer(strategy='mean'),StandardScaler())
 # RMK: using median instead of mean leads to a better result with SGD but slightly worse with other classifiers
 cat_pipeline = make_pipeline(SimpleImputer(strategy='most_frequent'),OneHotEncoder(handle_unknown='ignore'))
 
+
 # Encode the categorical attributes Sex and Pclass
 # Apply the above Pipelines
 
@@ -167,7 +111,8 @@ col_transformer = ColumnTransformer([
     ('log',fare_pipeline,['Fare']),
     ('embarked',embarked_pipeline,['Embarked']),
     ('age',age_pipeline,['Age']),
-    ('cat',cat_pipeline,['Sex','Pclass'])
+    ('cat',cat_pipeline,['Sex','Pclass']),
+    ('filled',SimpleImputer(strategy='most_frequent'),['FamilySize','IsAlone'])
 ])
 titanic_prepared= col_transformer.fit_transform(titanic)
 
@@ -182,24 +127,24 @@ print(col_transformer.get_feature_names_out())
 
 # ===================== Fit the data ====================
 
-# ============== SGD classifier ==============
-sgd_clf = SGDClassifier(random_state=42)
-sgd_clf.fit(titanic_prepared,titanic_labels)
-sgd_scores = cross_val_score(sgd_clf,titanic_prepared,titanic_labels,cv=3,scoring='accuracy')
-print(f"Cross validation with SGD: {sgd_scores}, mean: {sgd_scores.mean()}")
-
-# Cross validation with SGD: [0.74369748 0.64556962 0.76793249], mean: 0.7190665295654126
-
-
 # ============== KNN classifier ===============
 knn_clf = KNeighborsClassifier()
 knn_clf.fit(titanic_prepared,titanic_labels)
 knn_scores = cross_val_score(knn_clf,titanic_prepared,titanic_labels,cv=3,scoring='accuracy')
 print(f"Cross validation with KNN: {knn_scores}, mean: {knn_scores.mean()}")
 
+# Cross validation with KNN: [0.77731092 0.78481013 0.78902954], mean: 0.7837168622723351
+# Worse than without new features FamilySize and IsAlone
 
-# Cross validation with KNN: [0.82352941 0.82278481 0.82700422], mean: 0.8244394804335237
+# ============== SGD classifier ==============
+sgd_clf = SGDClassifier(random_state=42)
+sgd_clf.fit(titanic_prepared,titanic_labels)
+sgd_scores = cross_val_score(sgd_clf,titanic_prepared,titanic_labels,cv=3,scoring='accuracy')
+print(f"Cross validation with SGD: {sgd_scores}, mean: {sgd_scores.mean()}")
 
+
+# Cross validation with SGD: [0.73109244 0.7721519  0.74261603], mean: 0.7486201231547471
+# Better than without new features FamilySize and IsAlone
 
 # ============== SVC classifier ===============
 svc_clf = SVC()
@@ -207,8 +152,9 @@ svc_clf.fit(titanic_prepared,titanic_labels)
 svc_scores = cross_val_score(svc_clf,titanic_prepared,titanic_labels,cv=3,scoring='accuracy')
 print(f"Cross validation with SVC: {svc_scores}, mean: {svc_scores.mean()}")
 
+# Cross validation with SVC: [0.82773109 0.82278481 0.8185654 ], mean: 0.8230271011358129
+# Similar as without new features FamilySize and IsAlone
 # Cross validation with SVC: [0.81092437 0.84388186 0.81434599], mean: 0.823050739283055
-
 
 # ============= Random Forest classifier
 rf_clf = RandomForestClassifier()
@@ -216,32 +162,41 @@ rf_clf.fit(titanic_prepared,titanic_labels)
 rf_scores = cross_val_score(rf_clf,titanic_prepared,titanic_labels,cv=3,scoring='accuracy')
 print(f"Cross validation with RF: {rf_scores}, mean: {rf_scores.mean()}")
 
-# Cross validation with RF: [0.78151261 0.79746835 0.81434599], mean: 0.797775650344526
+# Cross validation with RF: [0.77310924 0.74683544 0.80168776], mean: 0.7738774834828446
+# Worse than without new features FamilySize and IsAlone
+
 
 # ======================== Testing on the test set ================
 
-# We choose KNN
+# We choose SVC
 
-
-knn = make_pipeline(col_transformer,KNeighborsClassifier())
-knn.fit(titanic,titanic_labels)
+svc = make_pipeline(col_transformer,SVC())
+svc.fit(titanic,titanic_labels)
 
 titanic_test = test_set.drop('Survived',axis=1)
 titanic_test_labels = test_set['Survived'].copy()
 
-predictions = knn.predict(titanic_test)
+titanic_test['FamilySize'] = titanic_test['SibSp'] + titanic_test['Parch'] + 1
+titanic_test['IsAlone'] = (titanic_test['FamilySize'] == 1).astype(int)
+
+predictions = svc.predict(titanic_test)
 accuracy = accuracy_score(titanic_test_labels,predictions)
 print(f"Accuracy on the test set is: {accuracy}")
 
-# Accuracy on the test set is: 0.8212290502793296
+# Accuracy on the test set is: 0.8156424581005587
+# Worse than without additional features FamilySize and IsAlone
+
+
+
 
 # =============== train on the entire test set =========
 
 X_titanic_full = titanic_full.drop('Survived',axis=1)
 y_titanic_full = titanic_full['Survived'].copy()
+X_titanic_full['FamilySize'] = X_titanic_full['SibSp'] + X_titanic_full['Parch'] + 1
+X_titanic_full['IsAlone'] = (X_titanic_full['FamilySize'] == 1).astype(int)
 
-knn.fit(X_titanic_full,y_titanic_full)
-
+svc.fit(X_titanic_full,y_titanic_full)
 
 
 # =============== Kaggle Submission ================
@@ -250,17 +205,18 @@ knn.fit(X_titanic_full,y_titanic_full)
 test_data = pd.read_csv('test.csv')
 
 # Preprocess test_data the SAME way as your training data
-# We used only the features 'Sex', 'Pclass', 'Fare', 'Age', 'Embarked'
+test_data['FamilySize'] = test_data['SibSp'] + test_data['Parch'] + 1
+test_data['IsAlone'] = (test_data['FamilySize'] == 1).astype(int)
 
 
 # Generate predictions (0 or 1) with our model knn
-test_predictions = knn.predict(test_data)
+test_predictions = svc.predict(test_data)
 
 # Create the formatted submission DataFrame
-submission = pd.DataFrame({
+submission_improved = pd.DataFrame({
     "PassengerId": test_data["PassengerId"],
     "Survived": test_predictions
 })
 
 # Export to CSV (CRITICAL: index=False otherwise extra column with indices 1,2,3,... not supported by Kaggle upload)
-submission.to_csv('submission.csv', index=False)
+submission_improved.to_csv('submission_improved.csv', index=False)
