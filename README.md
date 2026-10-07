@@ -1,4 +1,4 @@
 # Hands-on-ML
-Working on the book Hands on Machine Learning
+Implementations, exercises and experiments while working through *Hands-On Machine Learning with Scikit-Learn, Keras & PyTorch*, with additional experiments and notes.
 
 
